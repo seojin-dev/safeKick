@@ -1,0 +1,1103 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>안전킥(SafeKick) - 공유킥보드 안전 서비스</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.2.0/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/inferencejs"></script>
+    <style>
+      :root {
+        --primary-color: #007aff;
+        --danger-color: #ff3b30;
+        --success-color: #34c759;
+        --background-color: #f2f2f7;
+        --card-color: #ffffff;
+        --text-color: #000000;
+        --secondary-text: #8e8e93;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, sans-serif;
+      }
+
+      body {
+        background-color: var(--background-color);
+        color: var(--text-color);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      header {
+        width: 100%;
+        max-width: 800px;
+        padding: 20px 0;
+        text-align: center;
+      }
+
+      h1 {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 800px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      .card {
+        background-color: var(--card-color);
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      }
+
+      .cameras-container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .camera-row {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .camera-cell {
+        flex: 1;
+        min-width: 280px;
+      }
+
+      .camera-container {
+        position: relative;
+        width: 100%;
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 8px;
+        aspect-ratio: 4/3;
+      }
+
+      .camera-view {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .camera-title {
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      .video-element {
+        width: 100%;
+        height: 100%;
+        border-radius: 12px;
+        background-color: #000;
+        object-fit: cover;
+      }
+
+      .canvas-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border-radius: 12px;
+      }
+
+      .camera-label {
+        font-weight: 600;
+        margin-bottom: 4px;
+        text-align: center;
+        color: var(--primary-color);
+      }
+
+      .status-container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .status-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-radius: 12px;
+        background-color: var(--background-color);
+      }
+
+      .status-label {
+        font-weight: 600;
+        font-size: 16px;
+      }
+
+      .status-value {
+        font-weight: 500;
+        color: var(--secondary-text);
+      }
+
+      .status-safe {
+        color: var(--success-color);
+      }
+
+      .status-warning {
+        color: var(--danger-color);
+      }
+
+      .alert {
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 90%;
+        max-width: 400px;
+        padding: 20px;
+        border-radius: 16px;
+        background-color: var(--danger-color);
+        color: white;
+        font-weight: 600;
+        text-align: center;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        display: none;
+        animation: slideUp 0.3s ease-out forwards;
+        z-index: 100;
+      }
+
+      /* 버튼 스타일 */
+      .button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 16px 24px;
+        font-size: 16px;
+        font-weight: 600;
+        width: 100%;
+        cursor: pointer;
+        transition: background-color 0.2s;
+        margin-top: 12px;
+      }
+
+      .button:hover {
+        background-color: #0066cc;
+      }
+
+      .select-container {
+        margin-bottom: 16px;
+      }
+
+      .select-label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 500;
+      }
+
+      .select {
+        width: 100%;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid #dee2e6;
+        background-color: var(--card-color);
+        font-size: 16px;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238E8E93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        cursor: pointer;
+      }
+
+      .camera-select-row {
+        display: flex;
+        gap: 16px;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+
+      .camera-select-col {
+        flex: 1;
+        min-width: 280px;
+      }
+
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translate(-50%, 20px);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
+      }
+
+      .loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        gap: 16px;
+      }
+
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid rgba(0, 122, 255, 0.2);
+        border-radius: 50%;
+        border-top-color: var(--primary-color);
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .bounding-box {
+        position: absolute;
+        border: 3px solid;
+        border-radius: 4px;
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5);
+        pointer-events: none;
+      }
+
+      .helmet-box {
+        border-color: var(--success-color);
+      }
+
+      .no-helmet-box {
+        border-color: var(--danger-color);
+      }
+
+      .road-box {
+        border-color: var(--success-color);
+      }
+
+      .sidewalk-box {
+        border-color: var(--danger-color);
+      }
+
+      .crosswalk-box {
+        border-color: var(--danger-color);
+      }
+
+      .box-label {
+        position: absolute;
+        top: -25px;
+        left: 0;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        color: white;
+      }
+
+      .helmet-label {
+        background-color: var(--success-color);
+      }
+
+      .no-helmet-label {
+        background-color: var(--danger-color);
+      }
+
+      .road-label {
+        background-color: var(--success-color);
+      }
+
+      .sidewalk-label {
+        background-color: var(--danger-color);
+      }
+
+      .crosswalk-label {
+        background-color: var(--danger-color);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>안전킥(SafeKick)</h1>
+      <p>공유킥보드 이용자를 위한 안전 서비스</p>
+    </header>
+
+    <div class="container">
+      <div class="card">
+        <!-- 카메라 선택 UI -->
+        <div class="camera-select-row">
+          <div class="camera-select-col">
+            <label for="frontCameraSelect" class="select-label"
+              >전면 카메라</label
+            >
+            <select id="frontCameraSelect" class="select">
+              <option value="">카메라 검색 중...</option>
+            </select>
+          </div>
+          <div class="camera-select-col">
+            <label for="backCameraSelect" class="select-label"
+              >후면 카메라</label
+            >
+            <select id="backCameraSelect" class="select">
+              <option value="">카메라 검색 중...</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 양쪽 카메라 동시 표시 -->
+        <div class="cameras-container">
+          <div class="camera-row">
+            <!-- 전면 카메라 -->
+            <div class="camera-cell">
+              <div class="camera-label">전면 카메라 (헬멧 감지)</div>
+              <div class="camera-container">
+                <video
+                  id="frontVideo"
+                  class="video-element"
+                  autoplay
+                  playsinline
+                ></video>
+                <canvas id="frontCanvas" class="canvas-overlay"></canvas>
+              </div>
+            </div>
+
+            <!-- 후면 카메라 -->
+            <div class="camera-cell">
+              <div class="camera-label">후면 카메라 (도로 감지)</div>
+              <div class="camera-container">
+                <video
+                  id="backVideo"
+                  class="video-element"
+                  autoplay
+                  playsinline
+                ></video>
+                <canvas id="backCanvas" class="canvas-overlay"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button id="startButton" class="button">안전 분석 시작</button>
+      </div>
+
+      <div class="card status-container">
+        <h2>안전 상태</h2>
+        <div class="status-item">
+          <span class="status-label">헬멧 착용</span>
+          <span id="helmetStatus" class="status-value">분석 전</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">주행 위치</span>
+          <span id="sidewalkStatus" class="status-value">분석 전</span>
+        </div>
+      </div>
+
+      <div id="alert" class="alert">⚠️ 속도를 감소하고 탑승을 중지하세요!</div>
+
+      <div id="loading" class="card loading">
+        <div class="spinner"></div>
+        <p>모델을 로딩중입니다...</p>
+      </div>
+    </div>
+
+    <script>
+      // 전역 변수
+      let frontVideo = document.getElementById("frontVideo");
+      let backVideo = document.getElementById("backVideo");
+      let frontCanvas = document.getElementById("frontCanvas");
+      let backCanvas = document.getElementById("backCanvas");
+      let frontCtx, backCtx;
+      let startButton = document.getElementById("startButton");
+      let helmetStatus = document.getElementById("helmetStatus");
+      let sidewalkStatus = document.getElementById("sidewalkStatus");
+      let alert = document.getElementById("alert");
+      let loading = document.getElementById("loading");
+      let frontCameraSelect = document.getElementById("frontCameraSelect");
+      let backCameraSelect = document.getElementById("backCameraSelect");
+
+      let isAnalyzing = false;
+      let frontStream = null;
+      let backStream = null;
+      let captureInterval = null;
+
+      // 분석 결과 저장
+      let analysisResults = {
+        hasHelmet: false,
+        roadStatus: "알 수 없음",
+      };
+
+      // Roboflow API 키와 엔드포인트
+      const HELMET_API_KEY = "Dpx7rudeMdqFJFVlCy7V";
+      const HELMET_API_URL =
+        "https://detect.roboflow.com/helmet-detector-9rzmg-bcuae/1";
+
+      const SIDEWALK_API_KEY = "Dpx7rudeMdqFJFVlCy7V";
+      const SIDEWALK_API_URL = "https://detect.roboflow.com/sidewalk-g81ja/1";
+
+      // 페이지 로드 시 실행
+      document.addEventListener("DOMContentLoaded", async () => {
+        try {
+          console.log("📱 안전킥 앱이 시작되었습니다.");
+          loading.style.display = "none";
+
+          // 카메라 목록 가져오기
+          await getCameras();
+
+          // 버튼 이벤트 리스너
+          startButton.addEventListener("click", toggleAnalysis);
+
+          // 카메라 변경 이벤트 리스너
+          frontCameraSelect.addEventListener("change", () =>
+            changeFrontCamera()
+          );
+          backCameraSelect.addEventListener("change", () => changeBackCamera());
+        } catch (error) {
+          console.error("❌ 초기화 오류:", error);
+          loading.innerHTML = `<p style="color: var(--danger-color)">초기화 중 오류가 발생했습니다.<br>${error.message}</p>`;
+        }
+      });
+
+      // 사용 가능한 카메라 목록 가져오기
+      async function getCameras() {
+        try {
+          console.log("🔍 사용 가능한 카메라를 검색 중입니다...");
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter(
+            (device) => device.kind === "videoinput"
+          );
+
+          frontCameraSelect.innerHTML = "";
+          backCameraSelect.innerHTML = "";
+
+          if (videoDevices.length === 0) {
+            console.log("⚠️ 사용 가능한 카메라가 없습니다.");
+            const option = document.createElement("option");
+            option.text = "사용 가능한 카메라가 없습니다";
+            frontCameraSelect.add(option.cloneNode(true));
+            backCameraSelect.add(option);
+          } else {
+            console.log(`✅ ${videoDevices.length}개의 카메라를 찾았습니다.`);
+
+            // 모바일 기기의 경우 전/후면 카메라 구분 시도
+            const frontCameras = videoDevices.filter(
+              (device) =>
+                device.label.toLowerCase().includes("front") ||
+                device.label.toLowerCase().includes("전면")
+            );
+            const backCameras = videoDevices.filter(
+              (device) =>
+                device.label.toLowerCase().includes("back") ||
+                device.label.toLowerCase().includes("후면")
+            );
+
+            // 명시적으로 구분된 카메라가 없으면 모든 카메라를 보여줌
+            const frontCameraList =
+              frontCameras.length > 0 ? frontCameras : videoDevices;
+            const backCameraList =
+              backCameras.length > 0 ? backCameras : videoDevices;
+
+            // 전면 카메라 옵션 추가
+            frontCameraList.forEach((device, index) => {
+              const option = document.createElement("option");
+              option.value = device.deviceId;
+              option.text =
+                frontCameras.length > 0
+                  ? device.label || `전면 카메라 ${index + 1}`
+                  : device.label || `카메라 ${index + 1}`;
+              frontCameraSelect.add(option);
+              console.log(`📷 전면 카메라 후보 ${index + 1}: ${option.text}`);
+            });
+
+            // 후면 카메라 옵션 추가
+            backCameraList.forEach((device, index) => {
+              const option = document.createElement("option");
+              option.value = device.deviceId;
+              option.text =
+                backCameras.length > 0
+                  ? device.label || `후면 카메라 ${index + 1}`
+                  : device.label || `카메라 ${index + 1}`;
+              backCameraSelect.add(option);
+              console.log(`📷 후면 카메라 후보 ${index + 1}: ${option.text}`);
+            });
+
+            // 첫 번째 카메라로 초기화
+            await initFrontCamera(frontCameraSelect.value);
+            await initBackCamera(backCameraSelect.value);
+          }
+        } catch (error) {
+          console.error("❌ 카메라 목록 조회 에러:", error);
+        }
+      }
+
+      // 전면 카메라 초기화
+      async function initFrontCamera(deviceId) {
+        try {
+          console.log("🎬 전면 카메라 초기화 중...");
+          const constraints = {
+            video: {
+              deviceId: deviceId ? { exact: deviceId } : undefined,
+              facingMode: deviceId ? undefined : "user", // deviceId가 없으면 user(전면) 모드 시도
+            },
+          };
+
+          if (frontStream) {
+            frontStream.getTracks().forEach((track) => track.stop());
+          }
+
+          frontStream = await navigator.mediaDevices.getUserMedia(constraints);
+          frontVideo.srcObject = frontStream;
+
+          // 비디오 메타데이터 로드 완료 후 캔버스 설정
+          frontVideo.onloadedmetadata = () => {
+            console.log(
+              `✅ 전면 카메라 준비 완료 (해상도: ${frontVideo.videoWidth}x${frontVideo.videoHeight})`
+            );
+            frontCanvas.width = frontVideo.videoWidth;
+            frontCanvas.height = frontVideo.videoHeight;
+            frontCtx = frontCanvas.getContext("2d", {
+              willReadFrequently: true,
+            });
+            frontCtx.lineWidth = 3;
+            frontCtx.font = "14px sans-serif";
+          };
+        } catch (error) {
+          console.error("❌ 전면 카메라 초기화 에러:", error);
+        }
+      }
+
+      // 후면 카메라 초기화
+      async function initBackCamera(deviceId) {
+        try {
+          console.log("🎬 후면 카메라 초기화 중...");
+          const constraints = {
+            video: {
+              deviceId: deviceId ? { exact: deviceId } : undefined,
+              facingMode: deviceId ? undefined : "environment", // deviceId가 없으면 environment(후면) 모드 시도
+            },
+          };
+
+          if (backStream) {
+            backStream.getTracks().forEach((track) => track.stop());
+          }
+
+          backStream = await navigator.mediaDevices.getUserMedia(constraints);
+          backVideo.srcObject = backStream;
+
+          // 비디오 메타데이터 로드 완료 후 캔버스 설정
+          backVideo.onloadedmetadata = () => {
+            console.log(
+              `✅ 후면 카메라 준비 완료 (해상도: ${backVideo.videoWidth}x${backVideo.videoHeight})`
+            );
+            backCanvas.width = backVideo.videoWidth;
+            backCanvas.height = backVideo.videoHeight;
+            backCtx = backCanvas.getContext("2d", { willReadFrequently: true });
+            backCtx.lineWidth = 3;
+            backCtx.font = "14px sans-serif";
+          };
+        } catch (error) {
+          console.error("❌ 후면 카메라 초기화 에러:", error);
+        }
+      }
+
+      // 전면 카메라 변경
+      async function changeFrontCamera() {
+        const deviceId = frontCameraSelect.value;
+        if (deviceId) {
+          console.log("🔄 전면 카메라 변경 중...");
+          await initFrontCamera(deviceId);
+
+          // 분석 중이라면 재시작
+          if (isAnalyzing) {
+            stopAnalysis();
+            startAnalysis();
+          }
+        }
+      }
+
+      // 후면 카메라 변경
+      async function changeBackCamera() {
+        const deviceId = backCameraSelect.value;
+        if (deviceId) {
+          console.log("🔄 후면 카메라 변경 중...");
+          await initBackCamera(deviceId);
+
+          // 분석 중이라면 재시작
+          if (isAnalyzing) {
+            stopAnalysis();
+            startAnalysis();
+          }
+        }
+      }
+
+      // 분석 시작/중지 토글
+      function toggleAnalysis() {
+        if (isAnalyzing) {
+          stopAnalysis();
+        } else {
+          startAnalysis();
+        }
+      }
+
+      // 분석 시작
+      function startAnalysis() {
+        isAnalyzing = true;
+        startButton.textContent = "안전 분석 중지";
+        console.log("🚀 안전 분석을 시작합니다.");
+        // 3초마다 프레임 캡처 및 분석
+        captureInterval = setInterval(captureAndAnalyzeFrames, 3000);
+        // 첫 프레임 즉시 분석
+        captureAndAnalyzeFrames();
+      }
+
+      // 분석 중지
+      function stopAnalysis() {
+        isAnalyzing = false;
+        startButton.textContent = "안전 분석 시작";
+        helmetStatus.textContent = "분석 중지됨";
+        sidewalkStatus.textContent = "분석 중지됨";
+        hideAlert();
+        clearBoundingBoxes();
+
+        console.log("⏹️ 안전 분석을 중지했습니다.");
+
+        if (captureInterval) {
+          clearInterval(captureInterval);
+          captureInterval = null;
+        }
+      }
+
+      // 바운딩 박스 지우기
+      function clearBoundingBoxes() {
+        if (frontCtx) {
+          frontCtx.clearRect(0, 0, frontCanvas.width, frontCanvas.height);
+        }
+        if (backCtx) {
+          backCtx.clearRect(0, 0, backCanvas.width, backCanvas.height);
+        }
+      }
+
+      // 두 카메라의 비디오 프레임 캡처 및 분석
+      async function captureAndAnalyzeFrames() {
+        if (!isAnalyzing) return;
+
+        try {
+          console.log("📸 양쪽 카메라 이미지 캡처 및 분석 중...");
+
+          // 전면 카메라 분석 (헬멧 착용 감지)
+          await analyzeFrontCamera();
+
+          // 후면 카메라 분석 (도로 감지)
+          await analyzeBackCamera();
+
+          // 분석 결과 종합 처리
+          updateSafetyStatus();
+        } catch (error) {
+          console.error("❌ 전체 분석 오류:", error);
+        }
+      }
+
+      // 전면 카메라 분석 (헬멧 착용 감지)
+      async function analyzeFrontCamera() {
+        if (!frontCtx) return;
+
+        try {
+          console.log("📸 전면 카메라 이미지 캡처 및 분석 중... (헬멧 감지)");
+
+          // 현재 비디오 프레임을 캔버스에 그리기
+          frontCtx.drawImage(
+            frontVideo,
+            0,
+            0,
+            frontCanvas.width,
+            frontCanvas.height
+          );
+
+          // 캔버스의 이미지를 Base64로 변환
+          const imageDataUrl = frontCanvas.toDataURL("image/jpeg", 0.8);
+          const base64Image = imageDataUrl.split(",")[1];
+
+          // 헬멧 분석 요청
+          console.log("🪖 헬멧 감지 API 호출 중...");
+          const helmetResult = await analyzeHelmet(base64Image);
+
+          // 헬멧 감지 결과 처리
+          processHelmetResults(helmetResult);
+        } catch (error) {
+          console.error("❌ 전면 카메라 분석 오류:", error);
+        }
+      }
+
+      // 후면 카메라 분석 (도로 감지)
+      async function analyzeBackCamera() {
+        if (!backCtx) return;
+
+        try {
+          console.log("📸 후면 카메라 이미지 캡처 및 분석 중... (도로 감지)");
+
+          // 현재 비디오 프레임을 캔버스에 그리기
+          backCtx.drawImage(
+            backVideo,
+            0,
+            0,
+            backCanvas.width,
+            backCanvas.height
+          );
+
+          // 캔버스의 이미지를 Base64로 변환
+          const imageDataUrl = backCanvas.toDataURL("image/jpeg", 0.8);
+          const base64Image = imageDataUrl.split(",")[1];
+
+          // 보행로 분석 요청
+          console.log("🛣️ 보행로 감지 API 호출 중...");
+          const sidewalkResult = await analyzeSidewalk(base64Image);
+
+          // 도로 감지 결과 처리
+          processSidewalkResults(sidewalkResult);
+        } catch (error) {
+          console.error("❌ 후면 카메라 분석 오류:", error);
+        }
+      }
+
+      // 헬멧 감지 API 호출
+      async function analyzeHelmet(base64Image) {
+        try {
+          const response = await fetch(
+            `${HELMET_API_URL}?api_key=${HELMET_API_KEY}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              body: base64Image,
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`API 오류: ${response.status}`);
+          }
+
+          const result = await response.json();
+          console.log("✅ 헬멧 감지 API 응답 받음:", result);
+          return result;
+        } catch (error) {
+          console.error("❌ 헬멧 감지 API 오류:", error);
+          return { predictions: [] };
+        }
+      }
+
+      // 보행로 분류 API 호출
+      async function analyzeSidewalk(base64Image) {
+        try {
+          const response = await fetch(
+            `${SIDEWALK_API_URL}?api_key=${SIDEWALK_API_KEY}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+              },
+              body: base64Image,
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`API 오류: ${response.status}`);
+          }
+
+          const result = await response.json();
+          console.log("✅ 보행로 감지 API 응답 받음:", result);
+          return result;
+        } catch (error) {
+          console.error("❌ 보행로 감지 API 오류:", error);
+          return { predictions: [] };
+        }
+      }
+
+      // 헬멧 감지 결과 처리
+      function processHelmetResults(helmetData) {
+        // 전면 캔버스 지우기
+        if (frontCtx) {
+          frontCtx.clearRect(0, 0, frontCanvas.width, frontCanvas.height);
+        }
+
+        console.log("📊 헬멧 감지 결과 처리 중...");
+
+        // 헬멧 감지 결과 처리
+        const helmetPredictions = helmetData.predictions || [];
+        console.log(`👀 헬멧 감지: ${helmetPredictions.length}개 객체 발견`);
+
+        // 감지된 객체 로그
+        if (helmetPredictions.length > 0) {
+          helmetPredictions.forEach((pred, idx) => {
+            console.log(
+              `   객체 ${idx + 1}: ${pred.class} (신뢰도: ${(
+                pred.confidence * 100
+              ).toFixed(1)}%)`
+            );
+          });
+        } else {
+          console.log("   감지된 객체 없음");
+        }
+
+        // helmet과 nutshell 모두 헬멧으로 인식 (helmet이나 nutshell을 포함하는 이름도 포함)
+        const helmets = helmetPredictions.filter(
+          (pred) =>
+            (pred.class.toLowerCase().includes("helmet") ||
+              pred.class.toLowerCase().includes("nutshell")) &&
+            pred.confidence > 0.4
+        );
+        analysisResults.hasHelmet = helmets.length > 0;
+
+        // 헬멧 바운딩 박스 그리기
+        if (helmets.length > 0) {
+          console.log(`🪖 헬멧 착용 감지: ${helmets.length}개`);
+          helmets.forEach((helmet) => {
+            // 바운딩 박스 좌표 계산 수정
+            const x = helmet.x - helmet.width / 2;
+            const y = helmet.y - helmet.height / 2;
+
+            drawBoundingBox(
+              frontCtx,
+              x,
+              y,
+              helmet.width,
+              helmet.height,
+              "helmet"
+            );
+          });
+        } else {
+          // 헬멧이 감지되지 않음 - 사람이 감지된 경우 '미착용' 표시
+          const persons = helmetPredictions.filter(
+            (pred) =>
+              pred.class.toLowerCase() === "person" && pred.confidence > 0.4
+          );
+          if (persons.length > 0) {
+            console.log(`⚠️ 헬멧 미착용 인원 감지: ${persons.length}명`);
+            persons.forEach((person) => {
+              // 바운딩 박스 좌표 계산 수정
+              const x = person.x - person.width / 2;
+              const y = person.y - person.height / 2;
+
+              drawBoundingBox(
+                frontCtx,
+                x,
+                y,
+                person.width,
+                person.height,
+                "no-helmet"
+              );
+            });
+          } else {
+            console.log("👤 인식된 사람 없음");
+          }
+        }
+      }
+
+      // 보행로 감지 결과 처리
+      function processSidewalkResults(sidewalkData) {
+        // 후면 캔버스 지우기
+        if (backCtx) {
+          backCtx.clearRect(0, 0, backCanvas.width, backCanvas.height);
+        }
+
+        console.log("📊 보행로 감지 결과 처리 중...");
+
+        // 보행로 감지 결과 처리
+        const sidewalkPredictions = sidewalkData.predictions || [];
+        console.log(
+          `👀 보행로 감지: ${sidewalkPredictions.length}개 객체 발견`
+        );
+
+        // 감지된 객체 로그
+        if (sidewalkPredictions.length > 0) {
+          sidewalkPredictions.forEach((pred, idx) => {
+            console.log(
+              `   객체 ${idx + 1}: ${pred.class} (신뢰도: ${(
+                pred.confidence * 100
+              ).toFixed(1)}%)`
+            );
+          });
+        } else {
+          console.log("   감지된 객체 없음");
+        }
+
+        let currentLocation = "알 수 없음";
+        let highestConf = 0;
+
+        // 가장 높은 신뢰도를 가진 위치 찾기
+        for (const pred of sidewalkPredictions) {
+          if (pred.confidence > highestConf) {
+            highestConf = pred.confidence;
+            currentLocation = pred.class;
+          }
+        }
+
+        // 결과 저장
+        analysisResults.roadStatus = currentLocation;
+
+        // 보행로 바운딩 박스 그리기
+        if (sidewalkPredictions.length > 0) {
+          console.log(`🛣️ 주행 위치 감지: ${currentLocation}`);
+          const locationBoxType =
+            currentLocation === "road"
+              ? "road"
+              : currentLocation === "sidewalk"
+              ? "sidewalk"
+              : "crosswalk";
+
+          // 이미지 하단에 위치 표시
+          drawBoundingBox(
+            backCtx,
+            0,
+            backCanvas.height * 0.7,
+            backCanvas.width,
+            backCanvas.height * 0.3,
+            locationBoxType
+          );
+        } else {
+          console.log("🛣️ 주행 위치 감지 실패");
+        }
+      }
+
+      // 바운딩 박스 그리기
+      function drawBoundingBox(ctx, x, y, width, height, type) {
+        // 유효한 캔버스 컨텍스트 확인
+        if (!ctx) return;
+
+        // 유효한 좌표값인지 확인
+        if (isNaN(x) || isNaN(y) || isNaN(width) || isNaN(height)) {
+          console.error("❌ 바운딩 박스 좌표 오류:", { x, y, width, height });
+          return;
+        }
+
+        try {
+          // 바운딩 박스 좌표 보정 (캔버스 영역을 벗어나지 않도록)
+          const canvas = ctx.canvas;
+          const boxX = Math.max(0, Math.min(x, canvas.width - 1));
+          const boxY = Math.max(0, Math.min(y, canvas.height - 1));
+          const boxWidth = Math.min(width, canvas.width - boxX);
+          const boxHeight = Math.min(height, canvas.height - boxY);
+
+          // 바운딩 박스 색상과 라벨 설정
+          let labelText;
+
+          switch (type) {
+            case "helmet":
+              labelText = "헬멧 착용";
+              ctx.strokeStyle = "#34C759"; // 녹색
+              ctx.fillStyle = "#34C759";
+              break;
+            case "no-helmet":
+              labelText = "헬멧 미착용";
+              ctx.strokeStyle = "#FF3B30"; // 빨간색
+              ctx.fillStyle = "#FF3B30";
+              break;
+            case "road":
+              labelText = "도로";
+              ctx.strokeStyle = "#34C759"; // 녹색
+              ctx.fillStyle = "#34C759";
+              break;
+            case "sidewalk":
+              labelText = "인도";
+              ctx.strokeStyle = "#FF3B30"; // 빨간색
+              ctx.fillStyle = "#FF3B30";
+              break;
+            case "crosswalk":
+              labelText = "횡단보도";
+              ctx.strokeStyle = "#FF3B30"; // 빨간색
+              ctx.fillStyle = "#FF3B30";
+              break;
+            default:
+              labelText = "알 수 없음";
+              ctx.strokeStyle = "#5AC8FA"; // 파란색
+              ctx.fillStyle = "#5AC8FA";
+          }
+
+          // 바운딩 박스 그리기
+          ctx.beginPath();
+          ctx.rect(boxX, boxY, boxWidth, boxHeight);
+          ctx.stroke();
+
+          // 라벨 배경 그리기
+          const labelWidth = ctx.measureText(labelText).width + 10;
+          const labelY = Math.max(boxY - 20, 0); // 화면 상단을 벗어나지 않도록
+          ctx.fillRect(boxX, labelY, labelWidth, 20);
+
+          // 라벨 텍스트 그리기
+          ctx.fillStyle = "#FFFFFF"; // 흰색 텍스트
+          ctx.fillText(labelText, boxX + 5, labelY + 15);
+        } catch (error) {
+          console.error("❌ 바운딩 박스 그리기 오류:", error);
+        }
+      }
+
+      // 전체 안전 상태 업데이트
+      function updateSafetyStatus() {
+        console.log("📝 종합 안전 상태 업데이트 중...");
+
+        const hasHelmet = analysisResults.hasHelmet;
+        const roadStatus = analysisResults.roadStatus;
+
+        // 헬멧 상태
+        if (hasHelmet) {
+          helmetStatus.textContent = "착용 ✓";
+          helmetStatus.className = "status-value status-safe";
+        } else {
+          helmetStatus.textContent = "미착용 ✗";
+          helmetStatus.className = "status-value status-warning";
+        }
+
+        // 주행 위치 상태 업데이트
+        sidewalkStatus.textContent = roadStatus;
+
+        // 도로일 경우만 정상
+        const isSafeLocation = roadStatus === "road";
+
+        if (isSafeLocation) {
+          sidewalkStatus.className = "status-value status-safe";
+        } else {
+          sidewalkStatus.className = "status-value status-warning";
+        }
+
+        // 경고 표시 여부
+        if (!hasHelmet || !isSafeLocation) {
+          showAlert();
+        } else {
+          hideAlert();
+        }
+
+        // 최종 판정 결과 표시
+        console.log("📝 분석 결과 요약:");
+        console.log(`   헬멧 착용: ${hasHelmet ? "✅ 착용" : "❌ 미착용"}`);
+        console.log(
+          `   주행 위치: ${roadStatus} (${
+            roadStatus === "road" ? "✅ 안전" : "❌ 위험"
+          })`
+        );
+        console.log(
+          `   종합 판정: ${hasHelmet && isSafeLocation ? "✅ 안전" : "❌ 위험"}`
+        );
+      }
+
+      // 경고창 표시
+      function showAlert() {
+        alert.style.display = "block";
+      }
+
+      // 경고창 숨기기
+      function hideAlert() {
+        alert.style.display = "none";
+      }
+    </script>
+  </body>
+</html>
